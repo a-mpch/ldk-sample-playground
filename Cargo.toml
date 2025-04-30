@@ -1,0 +1,16 @@
+[package]
+name = "ldk-sample-playground"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ldk-sample = { path = "../ldk-sample" }
+lightning = { version = "0.1.2", features = ["dnssec"] }
+bitcoin = "0.32"
+bitcoincore-rpc = { version = "0.19.0" }
+corepc-node = { version = "0.7.0", features = [ "28_0", "download"] }
+tempfile = "3.5.0"
+tokio = { version = "1.25.0", features = ["rt", "rt-multi-thread", "signal", "test-util"] }
+log = "0.4"
+env_logger = "0.11"
+chrono = "0.4" 
