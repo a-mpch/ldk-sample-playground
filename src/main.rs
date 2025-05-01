@@ -1,8 +1,10 @@
+use anyhow::{Result, anyhow};
 use bitcoin::Network;
 use bitcoin::secp256k1::PublicKey;
 use chrono::Utc;
 use corepc_node::get_available_port;
 use corepc_node::{Conf, Node};
+use ldk_sample::HTLCStatus;
 use ldk_sample::config::LdkUserInfo;
 use ldk_sample::node_api::Node as LdkNode;
 use lightning::offers::offer::Quantity;
@@ -13,6 +15,7 @@ use std::str::FromStr;
 use std::time::Duration;
 use tempfile::TempDir;
 use tempfile::tempdir;
+use tokio::time::sleep;
 
 #[tokio::main]
 async fn main() {
@@ -59,6 +62,22 @@ async fn main() {
 
     ldk2.pay_offer(offer, None).await.unwrap();
     log::info!("payment sent");
+
+    if let Err(e) = wait_for_payment_completion(&ldk2, Duration::from_secs(120)).await {
+        log::error!("Error waiting for payment completion: {}", e);
+        return;
+    }
+    log::info!("Payment confirmed as non-pending.");
+
+    let payments = ldk2.list_payments().await;
+    for payment in payments {
+        log::info!("=========");
+        log::info!("payment: {:?}", payment.preimage);
+        log::info!("payment: {:?}", payment.secret);
+        log::info!("payment: {:?}", payment.amt_msat);
+        log::info!("payment: {:?}", payment.status);
+        log::info!("=========");
+    }
 }
 
 async fn start_ldk_nodes(
@@ -209,8 +228,44 @@ async fn connect_network(
     bitcoind
         .node
         .client
-        .generate_to_address(20, &ldk2_addr)
+        .generate_to_address(50, &ldk2_addr)
         .unwrap();
 
     (ldk1_pubkey, ldk2_pubkey)
+}
+
+async fn wait_for_payment_completion(ldk_node: &LdkNode, timeout_duration: Duration) -> Result<()> {
+    log::info!("Waiting for payment to complete...");
+    let start_time = tokio::time::Instant::now();
+
+    loop {
+        if start_time.elapsed() > timeout_duration {
+            return Err(anyhow!(
+                "Timeout waiting for payment completion after {:?}",
+                timeout_duration
+            ));
+        }
+
+        let payments = ldk_node.list_payments().await;
+
+        if let Some(latest_payment) = payments.last() {
+            log::debug!("Checking payment status: {:?}", latest_payment.status);
+            match latest_payment.status {
+                HTLCStatus::Pending => {
+                    log::debug!("Payment still pending, waiting 3 seconds...");
+                    sleep(Duration::from_secs(3)).await;
+                }
+                _ => {
+                    log::info!(
+                        "Payment status is {:?}, no longer pending.",
+                        latest_payment.status
+                    );
+                    return Ok(());
+                }
+            }
+        } else {
+            log::debug!("No payments found yet, waiting 3 seconds...");
+            sleep(Duration::from_secs(3)).await;
+        }
+    }
 }

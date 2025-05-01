@@ -629,6 +629,7 @@ dependencies = [
 name = "ldk-sample-playground"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bitcoin",
  "bitcoincore-rpc",
  "chrono",
