@@ -5,10 +5,12 @@ use corepc_node::get_available_port;
 use corepc_node::{Conf, Node};
 use ldk_sample::config::LdkUserInfo;
 use ldk_sample::node_api::Node as LdkNode;
+use lightning::offers::offer::Quantity;
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::time::Duration;
 use tempfile::TempDir;
 use tempfile::tempdir;
 
@@ -42,6 +44,21 @@ async fn main() {
     let (ldk1_pubkey, ldk2_pubkey) = connect_network(&ldk1, &ldk2, &bitcoind).await;
     log::info!("node1: {:?}", ldk1_pubkey);
     log::info!("node2: {:?}", ldk2_pubkey);
+
+    let offer = ldk1
+        .create_offer(
+            &[ldk2_pubkey],
+            Network::Regtest,
+            100_000,
+            Quantity::One,
+            std::time::SystemTime::now() + Duration::from_secs(24 * 60 * 60),
+        )
+        .await
+        .unwrap();
+    log::info!("offer: {:?}", offer);
+
+    ldk2.pay_offer(offer, None).await.unwrap();
+    log::info!("payment sent");
 }
 
 async fn start_ldk_nodes(
